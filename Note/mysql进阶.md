@@ -304,4 +304,152 @@ flush privileges;
 
 数据存储层，主要是将数据存储在运行于裸设备的文件系统之上，并完成与存储引擎的交互。
 
-4、
+# 4、SQL
+
+## 4.1、show profile
+
+利用`show profile`可以查看sql的执行周期！
+
+### 4.1.1开启profile
+
+查询 profile 是否开启：`show variables like '%profiling%';`
+
+<img src='img\image-20221110091929950.png'>
+
+如果没有开启即`profiling=off`，可以`set profiling=1`开启
+
+### 4.1.2、使用profile
+
++ 执行 <font color='red'>`show profiles` </font>命令，可以查看最近的几次查询。
+
+  <img src='img\image-20221110092641957.png'>
+
++ 根据上面查询的id（即`Query_ID`），执行 <font color='red'>`show profile cpu，memory,block io for query [Query_ID]` </font>命令，可以查看sql的具体执行步骤。
+
+  <img src='img\image-20221110093334796.png'>
+
+***如果查询没有结果，则使用下面语句进行查询（效果是一样的）***
+
+```sql
+# 高版本的profile查询记录信息，实际数据保存在这个表中
+SELECT * from information_schema.PROFILING
+/*
+注意由于mysql中profile默认只保存15条查询记录，所以很快会被覆盖，导致
+	刚查询业务语句，
+	去show profiles 查看id  如46
+	结果发现 information_schema.PROFILING中query_id被覆盖更新了
+	导致
+		SHOW PROFILE cpu,memory,block io FOR QUERY 46; 
+		或
+		SELECT * from information_schema.PROFILING where query_id=46
+	查询结果为空，就是过期被覆盖了
+*/
+```
+
+
+
+## 4.2、MySQL查询的大致流程
+
++ mysql客户端通过协议与mysql服务器建立连接
++ 发送查询语句
++ 先去检查查询缓存（query cache），如果命中，直接返回结果
++ 缓存没有命中，进行sql语句解析
+
+> 也就是说在解析查询sql语句之前，服务器会先访问查询缓存（query cache）--它存储SELECT语句以及相应的查询结果集。
+>
+> 如果某个查询结果已经位于缓存中，服务器就不会再对查询进行解析、优化以及执行。它仅仅将缓存中的结果返回给用户即可，这将大大提高系统的性能。
+
++ sql语法解析和预处理
+
+  > 首先mysql通过关键字将SQL语句进行解析，并生成一棵对应的“解析树”。
+  >
+  > **mysql解析器**将使用mysql语法规则验证和解析查询；
+  >
+  > **预处理器**则根据一些mysql规则进行进一步检查解析树是否合法
+  >
+  > 当解析树被认为是合法的时候，查询优化器optimizer就会将其转化为执行计划。一条查询可以有很多种执行的方式，最后都返回相同的结果。
+  >
+  > **优化器optimizer**的作用就是找到这其中最好的执行计划。
+
++ mysql默认使用 BTREE 索引，并且一个大致方向是：**无论怎么折腾sql，至少目前来说，mysql最高只用到表中的一个索引**
+
+## 4.3、SQL的执行顺序
+
+我们常见手写的顺序：
+
+```sql
+select distinct
+	<select_list>
+from
+	<left_table> <join_type>
+join <right_table> 
+on <join_condition>
+where
+	<where condition>
+group by <groupby_list>
+having <having_condition>
+order by <orderby_condition>
+limit <limit_number>
+```
+
+真正的执行顺序：
+
+​	随着mysql版本的更新换代，其优化器也在不断的升级，优化器会分析不同执行顺序产生的不同的性能消耗，从而动态调整执行顺序。下面就是经常出现的查询顺序：
+
+<img src='img\image-20221110095621441.png'>
+
+## 4.4、常见的join查询
+
+最最基本的五大join查询图，以后基本所有的查询都是基于这个。
+
+<img src='img\image-20221110105707089.png'>
+
+# 5、索引优化分析
+
+## 1.  索引的概念
+
+### 1.1 是什么
+
+MySQL官方对索引的定义为：**索引（index）是帮助MySQL高效获取数据的数据结构**。由此可以得出索引的本质：**索引是一种数据结构**，换句话说就是 <font color='red'>索引就是*排好序的用于快速查找的一种数据结构*</font>。
+
+> **索引作用位置：**
+>
+> + ==会影响where后的条件约束（查找）==
+> + ==会影响order by（排序）==
+>
+> 索引有两个作用：查找和排序
+
+在数据之外，数据库系统还维护者满足特定查找算法的数据结构，这些数据结构以某种方式引用（指向，类似指针）数据，这样就可以在这些数据结构上实现高级查找算法。这种数据结构，就是索引。
+
+下图就是一种可用的索引方式实例：
+
+<img src='img\image-20221110135458456.png'>
+
+一般来说，索引本身也很大，不可能全部存储在内存中，因此**索引往往以索引文件的形式存储在磁盘上**。
+
+### 1.2 索引分类
+
+**我们平时说的索引，如果没有特殊说明就是==BTREE==（==多路搜索树==，并不一定是二叉的）结构组织的索引**。
+
+其中==**聚集索引，次要索引，复合索引，前缀索引，唯一索引默认都是B+树索引，统称索引**==。
+
+当然，mysql中除了B+树这种索引外，还有==**哈希索引（hash index）**==等。
+
++ B树（多路搜索树）
++ B+树
++ 哈希
+
+### 1.3 索引的优缺点
+
+***优点：***
+
++ 提高了数据**检索**的效率，降低数据库的io成本
++ 通过索引列对数据进行排序，降低了数据排序的成本，从而降低查询时的cpu消耗
+
+***缺点：***
+
++ 虽然索引大大提高了查询速度，但同时会**降低更新**表的速度，比如对表进行insert，update和delete。因为更新表时，MySQL不仅要保存数据，还要生成、更新一下索引文件。
++ 索引实际上也是一张表，该表存放者主键与索引字段，并指向实体表的记录，所以索引列也是要**占用空间**
+
+## 2. MySQL的索引
+
