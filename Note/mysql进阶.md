@@ -715,6 +715,8 @@ select_type表示当前查询的类型，主要用于区分**普通查询、联�
 
 ### 2.4 字段type
 
+
+
 type查询的访问类型，是较为重要的一个指标。
 
 ```sql
@@ -722,7 +724,17 @@ type查询的访问类型，是较为重要的一个指标。
 system > const > eq_ref > ref > fulltext > ref_or_null > index_merge > unique_subquery > index_subquery > range > index > All
 ```
 
-#### 2.4.1 syatem类型
+#### 2.4.0 覆盖索引
+
+概念：查询的列（字段），与复合索引的字段完全相同（即查询结果就在索引中，或全从索引中取数据）
+
+> 如果查询过程中使用了覆盖索引，则该索引仅出现在key列表中
+>
+> <img src='img\image-20221114103230932.png'>
+
+<img src='img\image-20221114104105536.png'>
+
+#### 2.4.1 system类型
 
 表中至于一条记录（类似系统表），这是const类型的特例，平时不会出现。
 
@@ -775,27 +787,314 @@ key列显示使用了哪个索引，一般就是在你的where语句中出现了
 
 full table scan，全表扫描
 
-#### 2.4.8 index_merge类型
+#### 2.4.8 index_merge类型（索引合并）
 
+在查询过程中需要多个索引组合使用，通常出现在有or的关键字的sql中（**看实际使用key，有多个值**）。
 
+<img src='img\image-20221114103230932.png'>
+
+<img src='img\image-20221114093810942.png'>
 
 #### 2.4.9 ref_or_null类型
 
+对于某个字段既需要关联条件，也需要null值的情况下。查询优化器会选择用ref_or_null连接查询
+
+<img src='img\image-20221114093950375.png'>
+
 #### 2.4.10 index_subquery类型
+
+利用索引来关联子查询，不再全表扫描
+
+<img src='img\image-20221114094231850.png'>
 
 #### 2.4.11 unique_subquery类型
 
+该联接类型类似于index_subquery，子查询中的唯一（unique）索引
+
+<img src='img\image-20221114094435850.png'>
+
 ### 2.5 possible_keys
+
+**显示可能应用在这张表中的索引，一个或多个**。查询涉及到的字段上若存在索引，则该索引将被列出，但**不一定被查询实际使用**
 
 ### 2.6 key
 
+实际使用的索引，如果为null表示没有使用索引。
+
 ### 2.7 key_len
+
+表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。key_len字段能够帮你检查是否充分的利用上了索引。key_len越长，说明索引使用的越充分。
+
+<img src='img\image-20221114095330227.png'>
+
+<img src='img\image-20221114095937447.png'>
+
+<img src='img\image-20221114100151104.png'>
 
 ### 2.8 ref
 
+显示索引的哪一列被使用了，如果可能（比如查询条件是一个确定的值）的话是一个常数。哪些列或常量被用于查找索引列上的值。
+
+`ref的值按照执行顺序关联， 并且引用的值看等号=右边的表达式`
+
+<img src='img\image-20221114100436089.png'>
+
+<img src='img\image-20221114101435181.png'>
+
 ### 2.9 rows
 
+rows列显示MySQL认为它执行查询时必须检查的行数，**越少越好**!
+
+<img src='img\image-20221114102809085.png'>
+
 ### 2.10 Extra
+
+其他的额外重要的信息，主要有以下几个值：
+
+#### 2.10.1 Using filesort（排序没用到索引）
+
+<font color='red'>组合索引排序时排序字段必须按照组合索引字段的顺序</font>
+
+**查询中需要排序的字段，如果通过使用了索引将大大提高排序速度**
+
+说明MySQL会对数据使用一个外部的索引排序，而不是按照表内的索引顺序进行读取。**MySQL中无法利用索引完成的排序成为“文件排序”**
+
+<img src='img\image-20221114110226484.png'>
+
+#### 2.10.2 Using temporary（产生了临时表）
+
+使用了临时表保存中间结果，MySQL在对查询结果排序时使用了临时表。常见于排序order by 和分组查询group by。
+
+<img src='img\image-20221114112722712.png'>
+
+<img src='img\image-20221114112927554.png'>
+
+#### 2.10.3 Using index
+
+表示使用到了覆盖索引（即查询的字段和顺序，与建立复合索引的顺序一致），避免了访问表的数据行，效率不错。
+
++ 如果同时出现using where，表示索引被用来执行索引键值的查找
++ 如果没有同时出现using where，表明索引只是用来读取数据而非利用索引执行查找
+
++ 出现`Using index for group-by` 表示利用索引来分组
++ 出现`Using index for order-by` 表示利用索引来排序
+
+#### 2.10.4 Using where
+
+表示使用了where进行过滤
+
+#### 2.10.5 Using join buffer
+
+表示使用了连接缓存，此时需要调高缓冲池的数量
+
+#### 2.10.6 impossible where
+
+where的子句总还是false的情况，如`where 0< 1`这样
+
+#### 2.10.7 select tables optimized away
+
+在没有 GROUPBY 子句的情况下，基于索引优化 MIN/MAX 操作或者对于 MyISAM 存储引擎优化 COUNT(*)操 作，不必等到执行阶段再进行计算，查询执行计划生成的阶段即完成优化。
+
+<img src='img\image-20221114114737791.png'>
+
+<img src='img\image-20221114114806299.png'>
+
+# 7、**单表使用索引常见的索引失效
+
+## 7.1 全值匹配我最爱
+
+查询时的条件，和复合索引所有的列完全相同。
+
+<img src='img\image-20221114144913946.png'>
+
+## 7.2 ==最佳左前缀法则==
+
+即查询从索引的最左前列开始并且不跳过索引中的列。
+
+> 举个例子：建立的索引为idx_name_age_sex
+>
+> 查询单/多列时：**where或on条件必须按照复合索引的建立顺序， name [ age [ sex [...] ] ] 取列（但是where中顺序不做要求）不允许跳过中间的某列**
+>
+> age或age,sex或sex都是不可以的
+>
+>  **name比作火车头，其余字段类似于车厢，火车头必须有**
+>
+> |\=\=\=\=\=>口诀：带头大哥不能少，（复合索引）中间兄弟不能断
+>
+> ```sql
+> # 索引条件顺序无所畏，但一定要有且按照复合索引的顺序的列(下面俩等价)
+> explain select *  from `t_emp` where age = 100 and `name`="张三丰"; -- 顺序无所畏
+> explain select *  from `t_emp` where `name`="张三丰" and age = 100;
+> ```
+>
+> <img src='img\image-20221114143827608.png'>
+
+==**结论：过滤条件要使用索引必须按照索引建立时的顺序，依次满足，一旦跳过某个字段，索引后面的字段都无 法被使用。**==
+
+## 7.3 不要在索引列上做任何操作（计算、函数、自动or手动的类型转换），会导致索引失效
+
+## 7.4 存储引擎不能使用索引中范围条件右边的列
+
+如`in, between..and, >, <, like`等，会导致右边的条件列无法用到索引
+
+> + 作为范围筛选本身的列 **查找数据时没有用到(复合)索引，排序时用到了(复合)索引**
+>
+> + 右边的列都没有用到
+>
+>   > 其中like比较特殊，如果是 `like 'xxx%'`这样的则其右边的还可以使用索引，不像其它的范围不能用索引。
+
+<img src='img\image-20221114145721359.png'>
+
+## 7.5 尽量使用覆盖索引（查询列和复合索引列完全一致），减少select *
+
+## 7.6 mysql在使用不等于（!=或<>）的时候无法使用索引，会导致全表扫描
+
+## 7.7 `is null`，`is not null` 也无法使用索引
+
+## 7.8 like以通配符（%，*等）开头sql，会导致索引失效，如果是通配符结尾，则是range级别可以用索引
+
+<img src='img\image-20221114151712371.png'>
+
+## 7.9 字符串（char,varchar）不加单引号导致索引失效
+
+## 7.10 减少用or的次数，用它连接时会导致索引失效
+
+## 7.11  思考问题：如何保证like中通配符开头的查询，一定用到索引？
+
+解决方法：==使用覆盖索引，数据只需在索引中检索不需要全表扫描==
+
+```sql
+-- 存在索引 idx_name_age
+-- 索引失效全表扫描
+explain select `name`,`age`,id,deptId from `t_emp` where name like '%小宝%'; -- （全表）
+explain select `name`,`age`,id from `t_emp` where name like '%小宝%'; -- （覆盖索引，id也有索引）
+explain select `name`,`age` from `t_emp` where name like '%小宝%'; -- （覆盖索引）
+explain select `name` from `t_emp` where name like '%小宝%'; -- （覆盖索引）
+explain select `age` from `t_emp` where name like '%小宝%'; -- （覆盖索引）
+```
+
+## 7.12 练习
+
+<img src='img\image-20221114160236426.png'>
+
+<img src='img\image-20221114160535406.png'>
+
+<img src='img\image-20221114160816072.png'>
+
+<img src='img\image-20221114160938709.png'>
+
+<img src='img\image-20221114161757580.png'>
+
+<img src='img\image-20221114162006574.png'>
+
+<img src='img\image-20221114162241744.png'>
+
+<img src='img\image-20221114162441855.png'>
+
+<img src='img\image-20221114163037992.png'>
+
+<img src='img\image-20221114164328013.png'>
+
+> **like范围特殊，只要是常量字符开头，不管中间是几个%百分号都可以用到索引，且右边的也都可以用索引**
+
+## 7.13 总结 （口诀）
+
+全值匹配我最爱，最左前缀要遵从。
+
+（复合索引）带头大哥不能死，中间兄弟不能断。
+
+索引列上少计算（函数），范围（包括like）之后全失效。
+
+like百分号写最右，覆盖索引不写*。
+
+不等（!=/<>）空值还有OR，索引索引很重要。
+
+varchar引号不能少，sql优化有诀窍。
+
+# 8、关联(left/right join)查询优化
+
+## 8.0 总结
+
++ 在优化关联查询时，只有在**被驱动表建立索引才有效**！ 
+
+  > 被驱动表：left join时的右表，right join的左表
+
++ left join 时，左侧的为驱动表，右侧为被驱动表！
++ right join 时，右侧的为驱动表，左侧为被驱动表！
++ inner join ，mysql 会自己帮你把小结果集的表选为驱动表
++ straight_join，mysql会强制把左表作为驱动表
+
+## 8.1 left join
+
+==**左关联索引加在右表上**==
+
+<img src='img\image-20221114165035661.png'>
+
+<img src='img\image-20221114165130124.png'>
+
+## 8.2 right join
+
+==**右关联索引加在坐标上**==
+
+> 与left join刚好相反
+
+## 8.3 inner join
+
+<font color='red'>**inner join 时，mysql 会自己帮你把小结果集的表选为驱动表。 **</font>
+
+
+
+## 8.4 straight_join
+
+<font color='red'>**效果和inner join一样，但是强制把左表作为驱动表**</font>
+
+<img src='img\image-20221114165709687.png'>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
