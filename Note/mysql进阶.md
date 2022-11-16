@@ -308,6 +308,9 @@ flush privileges;
 
 ## 4.1、show profile
 
++ ==**因为profile更功能默认是关闭的，所以每次新开一个查询窗口（包括navicat的新窗口）都是一个新会话，即profile功能是关闭的**==
++ ==**多个窗口会话中执行的sql，只会被当前窗口的profile记录，不会被其他窗口的profil记录（即`show profiles`仅显示在当前会话窗口执行的最新15条sql）**==
+
 利用`show profile`可以查看sql的执行周期！
 
 ### 4.1.1开启profile
@@ -1139,9 +1142,9 @@ group by 实质是先排序后进行分组，遵循索引键的最佳左前缀�
 
 
 
-# 11、截取查询分析
+# 11、==>截取查询分析==
 
-## 11.1 慢查询日志
+## 11.1 ***慢查询日志***
 
 MySQL的慢查询日志是MySQL提供的一种日志记录，它用来记录在MySQL中响应时间超过阀值的语句，具 体指运行时间超过long_query_time值的SQL，则会被记录到慢查询日志中。
 
@@ -1194,9 +1197,9 @@ log_output=FILE
 
 
 
-## 11.2 慢查询日志分析工具mysqldumpslow
+## 11.2 ***mysqldumpslow日志分析***
 
-查看mysqldumpslow 帮助信息：
+慢查询日志分析工具mysqldumpslow，查看mysqldumpslow 帮助信息：
 
 ```sh
 [root@centos7 ~]# mysqldumpslow --help
@@ -1241,23 +1244,62 @@ mysqldumpslow -s t -t 10 /var/lib/mysql/centos7-slow.log |grep "left join"
 mysqldumpslow -s t -t 10 -g "left join" /var/lib/mysql/centos7-slow.log
 ```
 
-## 11.3 show processlist
+## 11.3 ***show processlist***
 
 用于查询mysql当前进程列表，可以杀掉故障进程
 
 <img src='img\image-20221116155717177.png'>
 
-# 12、大数据准备
+
+
+## 11.4 大数据准备
 
 见pdf上**第 7 章 批量数据脚本**
 
 
 
+## 11.5 ***show profile***
 
++ ==**因为profile更功能默认是关闭的，所以每次新开一个查询窗口（包括navicat的新窗口）都是一个新会话，即profile功能是关闭的**==
++ ==**多个窗口会话中执行的sql，只会被当前窗口的profile记录，不会被其他窗口的profil记录（即`show profiles`仅显示在当前会话窗口执行的最新15条sql）**==
 
+### 1 概念
 
+profile是mysql提供可以用来分析当前会话中语句执行的资源消耗情况，用于sql的调优。
 
+官网连接：http://dev.mysql.com/doc/refman/5.5/en/show-profile.html
 
+默认情况下该功能处于关闭状态，并且默认保存最近15次的允许操作。
+
+### 2 使用步骤
+
++ 查看当前MySQL版本是否支持
+
+  <img src='img\image-20221116161442949.png'>
+
++ 若该功能处于关闭状态，请开启
+
+  ```sql
+  set profiling=on;
+  ```
+
++ 执行目标/业务sql
+
++ `show profiles`查看最新的15条记录（==sql在哪个会话窗口执行，就在哪个窗口查看（别的窗口不显示）==），记录业务sql查询对应的query_id（比如我的就是33）
+
+  <img src='img\image-20221116163934411.png'>
+
++ `show profile cpu,block io for query xxxId`查看目标业务sql语句，实际消耗的系统底层信息
+
+  <img src='img\image-20221116170116809.png'>
+
+  ```sql
+  # profile的数据实际来源的表就是 information_schema.PROFILING 
+  # 你可以自己查看这个表，查看所有信息  
+  select * from  information_schema.PROFILING where query_id=130; -- 等价于上面的show profile ..
+  ```
+
++ 
 
 
 
