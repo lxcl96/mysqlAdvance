@@ -1139,11 +1139,117 @@ group by 实质是先排序后进行分组，遵循索引键的最佳左前缀�
 
 
 
+# 11、截取查询分析
+
+## 11.1 慢查询日志
+
+MySQL的慢查询日志是MySQL提供的一种日志记录，它用来记录在MySQL中响应时间超过阀值的语句，具 体指运行时间超过long_query_time值的SQL，则会被记录到慢查询日志中。
+
+具体指运行时间超过long_query_time值的SQL，则会被记录到慢查询日志中。long_query_time的默认值为 10，意思是运行10秒以上的语句。 
+
+由他来查看哪些SQL超出了我们的最大忍耐时间值，比如一条sql执行超过5秒钟，我们就算慢SQL，希望能 收集超过5秒的sql，结合之前explain进行全面分析。
+
+### ***怎么用：***
+
+<font color='red'>**默认情况下，MySQL数据库没有开启慢查询日志，需要我们手动开启。**</font>
+
+<font color='red'>**如果不是sql调优需要，不建议开启，会影响吸系统性能**</font>
+
+```sql
+-- 查询mysql是否开启慢查询(以及日志保存的位置)
+show variables like '%slow_query_log%';
+-- 查看当前数据库，慢查询的sql总数
+show status like '%Slow_queries%';
+--  查询mysql慢查询的时间设置
+show VARIABLES like 'long_query_time';
+-- 开启慢查询
+set global slow_query_log=ON;
+-- 设置慢查询时间（单位秒）,不会马上生效，需要重启数据库(或者新建立连接，新会话窗口)
+set global long_query_time=1;
+-- 设置慢查询日志保存位置
+set global slow_query_log_file='D:\mysql5.6\querySlowLog\slowQuery.log';
+
+-- 查看是否使用索引，及索引的级别
+explain select  from `slow_log` where start_time  '20221024 000000';
+
+-- 遇到多列索引失效的情况，可以将所有的查询列联合作为一个索引
+alter  table  表名  add  index  索引名(index_name)  (列名1，列名2.......);
+```
+
+### **注意：**
+
+使用命令set global slow_query_log=1/ON开启了慢查询日志只对当前数据库有效
+使用MySQL重启后会失效。
+
+如果需要永久保存慢查询，需要再配置文件`/etc/my.cnf`中配置：
+
+```sh
+# /etc/my.cnf 即mysql配置文件
+[mysqld]
+slow_query_log=1
+slow_query_log_file=/var/lib/mysql/atguigu-slow.log
+long_query_time=3
+log_output=FILE
+```
 
 
 
+## 11.2 慢查询日志分析工具mysqldumpslow
 
+查看mysqldumpslow 帮助信息：
 
+```sh
+[root@centos7 ~]# mysqldumpslow --help
+Usage: mysqldumpslow [ OPTS... ] [ LOGS... ]
+
+Parse and summarize the MySQL slow query log. Options are
+
+  --verbose    verbose
+  --debug      debug
+  --help       write this text to standard output
+
+  -v           verbose # 显示详细信息
+  -d           debug
+  -s ORDER     what to sort by (al, at, ar, c, l, r, t), 'at' is default # 以何种方式排序，默认是at
+                al: average lock time # 平均锁定时间
+                ar: average rows sent # 平均返回记录数
+                at: average query time # 平均查询时间
+                 c: count # sql语句访问次数
+                 l: lock time # sql语句锁定时间
+                 r: rows sent # sql语句返回的记录
+                 t: query time # sql语句查询时间
+  -r           reverse the sort order (largest last instead of first) #反/倒序,最大的是最后一个
+  -t NUM       just show the top n queries # 返回排序后前n条数据
+  -a           dont abstract all numbers to N and strings to 'S' 
+  -n NUM       abstract numbers with at least n digits within names
+  -g PATTERN   grep: only consider stmts that include this string # 管道grep 
+  -h HOSTNAME  hostname of db server for *-slow.log filename (can be wildcard),
+               default is '*', i.e. match all
+  -i NAME      name of server instance (if using mysql.server startup script)
+  -l           don't subtract lock time from total time
+```
+
+例子：
+
+```sh
+# 得到返回记录集最多的10个sql
+mysqldumpslow -s r -t 10 /var/lib/mysql/centos7-slow.log
+# 得到访问次数最多的10个sql
+mysqldumpslow -s c -t 10 /var/lib/mysql/centos7-slow.log
+# 得到按照时间排序的前10条中含有左连接的查询语句(两种方法都可以)
+mysqldumpslow -s t -t 10 /var/lib/mysql/centos7-slow.log |grep "left join"
+mysqldumpslow -s t -t 10 -g "left join" /var/lib/mysql/centos7-slow.log
+```
+
+## 11.3 show processlist
+
+用于查询mysql当前进程列表，可以杀掉故障进程
+
+<img src='img\image-20221116155717177.png'>
+
+# 12、大数据准备
+
+见pdf上**第 7 章 批量数据脚本**
 
 
 
