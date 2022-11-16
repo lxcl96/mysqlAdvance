@@ -1299,11 +1299,40 @@ profile是mysql提供可以用来分析当前会话中语句执行的资源消�
   select * from  information_schema.PROFILING where query_id=130; -- 等价于上面的show profile ..
   ```
 
-+ 
++ 注意**（执行`show all for query xxxx`）status列中是否有**以下四列：
+
+  > + **出现`converting HEAP to MyISAM`，查询结果太大了，内存都不够用放在磁盘上了**
+  > + **`Creating tmp tables`创建临时表了（拷贝数据到临时表，用完删除）**
+  > + **`Copying to tmp table on disk`把内存中临时表复制到磁盘上，危险**
+  > + **locked**
+  >
+  > <img src='img\image-20221116194914056.png'>
 
 
 
+## 11.6 全局查询日志
 
+记录所有的sql（只允许在测试环境用），**命令方式**开启之后**所有的sql语句都会记录到mysql库里的general_log表中**
+
+***配置文件启用：***
+
+```sh
+# /etc/my.cnf 开启
+general_log=1
+# 记录日志文件的路径
+general_log_file=/path/logfile
+# 输出格式
+log_output=FILE
+```
+
+***命令方式启用：***
+
+```sql
+set global general_log=1; -- 开启
+set global log_output='TABLE'; -- 以table方式记录sql（就是把sql记录到表中，默认是文件）
+```
+
+<img src='img\image-20221116200348424.png'>
 
 
 
