@@ -71,3 +71,13 @@ flush privileges;
 ```
 
 ### 6、union合并加上去重，union all 合并但是不去重
+
+### 7、显示某张表上所有索引
+
+```sql
+show index from xxx;
+```
+
+### 8、explain sql语句（分析sql）
+
+### 9、
